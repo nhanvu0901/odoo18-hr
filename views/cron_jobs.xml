@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="cron_certificate_processing" model="ir.cron">
+            <field name="name">Certificate Processing</field>
+            <field name="model_id" ref="model_notification_certificate"/>
+            <field name="state">code</field>
+            <field name="code">model.process_certificate()</field>
+            <field name="interval_number">5</field>
+            <field name="interval_type">minutes</field>
+            <field name="active">False</field>
+        </record>
+    </data>
+</odoo>

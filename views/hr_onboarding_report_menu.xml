@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+
+    <!-- Our report menu -->
+    <menuitem id="menu_hr_onboarding_report"
+              name="Onboarding/Offboarding Report"
+              parent="hr.hr_menu_hr_reports"
+              action="action_hr_onboarding_report"
+              sequence="10"/>
+</odoo>
