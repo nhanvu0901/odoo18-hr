@@ -9,38 +9,53 @@ class CertificateNotificationRecord(models.Model):
     """Custom model to handle certificate notifications with consistent redirect behavior"""
     _name = 'certificate.notification.record'
     _description = 'Certificate Notification Record'
-    _inherit = ['mail.thread']
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _rec_name = 'name'
 
     display_name = fields.Char('Name', compute='_compute_display_name', store=True)
-    name = fields.Char('Name', compute='_compute_display_name', store=True)  # Fallback for mail templates
+    name = fields.Char('Name', compute='_compute_display_name', store=True)
     employee_id = fields.Many2one('hr.employee', string='Employee', required=True)
-    certificate_id = fields.Many2one('hr.resume.line', string='Certificate', required=True)
+    certificate_id = fields.Many2one('hr.resume.line', string='Certificate', required=True, ondelete='cascade')
     expiry_date = fields.Date('Expiry Date')
     days_remaining = fields.Integer('Days Remaining', compute='_compute_days_remaining', store=True)
 
-    @api.depends('employee_id', 'certificate_id')
+    # Additional fields to store certificate info in case the original record is deleted
+    certificate_name = fields.Char('Certificate Name', help='Backup name in case certificate record is deleted')
+    certificate_description = fields.Text('Certificate Description', help='Backup description')
+
+    @api.depends('employee_id', 'certificate_id', 'certificate_name')
     def _compute_display_name(self):
         for record in self:
             try:
-                if record.employee_id and record.certificate_id and hasattr(record.certificate_id, 'id'):
-                    # Use display_name which is more reliable than name
+                if record.employee_id:
                     employee_name = record.employee_id.name or "Unknown Employee"
-                    # Try different possible name fields for the certificate
-                    certificate_name = (
-                            getattr(record.certificate_id, 'name', None) or
-                            getattr(record.certificate_id, 'display_name', None) or
-                            getattr(record.certificate_id, 'description', None) or
-                            f"Certificate {record.certificate_id.id}"
-                    )
+
+                    # Try to get certificate name from the linked record first
+                    certificate_name = None
+                    if record.certificate_id and hasattr(record.certificate_id, 'id') and record.certificate_id.id:
+                        try:
+                            # Safely access the certificate record
+                            certificate_name = (
+                                    getattr(record.certificate_id, 'name', None) or
+                                    getattr(record.certificate_id, 'display_name', None) or
+                                    getattr(record.certificate_id, 'description', None)
+                            )
+                        except Exception as e:
+                            logger.warning(f"Error accessing certificate_id for record {record.id}: {e}")
+                            certificate_name = None
+
+                    # Fallback to stored certificate name
+                    if not certificate_name:
+                        certificate_name = record.certificate_name or f"Certificate {record.certificate_id.id if record.certificate_id else 'Unknown'}"
+
                     computed_name = f"{employee_name} - {certificate_name}"
                     record.display_name = computed_name
-                    record.name = computed_name  # Set both for mail template compatibility
+                    record.name = computed_name
                 else:
                     record.display_name = "Certificate Notification"
                     record.name = "Certificate Notification"
             except Exception as e:
-                logger.warning(f"Error computing display_name: {e}")
+                logger.warning(f"Error computing display_name for record {record.id}: {e}")
                 record.display_name = "Certificate Notification"
                 record.name = "Certificate Notification"
 
@@ -55,6 +70,10 @@ class CertificateNotificationRecord(models.Model):
 
     def action_view_certificate(self):
         """Action that redirects to the certificate list filtered for this employee"""
+        self.ensure_one()
+        if not self.employee_id:
+            return {'type': 'ir.actions.act_window_close'}
+
         return {
             'type': 'ir.actions.act_window',
             'name': f'Certificates - {self.employee_id.name}',
@@ -70,6 +89,61 @@ class CertificateNotificationRecord(models.Model):
             },
             'target': 'current',
         }
+
+    @api.model
+    def create(self, vals):
+        """Override create to store certificate info as backup"""
+        record = super().create(vals)
+        # Store certificate name as backup in case the certificate record gets deleted
+        if record.certificate_id:
+            try:
+                certificate_name = (
+                        getattr(record.certificate_id, 'name', None) or
+                        getattr(record.certificate_id, 'display_name', None) or
+                        getattr(record.certificate_id, 'description', None) or
+                        f"Certificate {record.certificate_id.id}"
+                )
+                record.certificate_name = certificate_name
+                record.certificate_description = getattr(record.certificate_id, 'description', '')
+            except Exception as e:
+                logger.warning(f"Error storing certificate backup info: {e}")
+        return record
+
+    def read(self, fields=None, load='_classic_read'):
+        """Override read to handle broken certificate references"""
+        try:
+            return super().read(fields, load)
+        except AttributeError as e:
+            if "'_unknown' object has no attribute 'id'" in str(e):
+                # Handle broken certificate references
+                logger.warning(f"Broken certificate reference detected, cleaning up: {e}")
+                # Try to fix by clearing the broken certificate_id
+                for record in self:
+                    if hasattr(record, 'certificate_id'):
+                        try:
+                            # Test if certificate_id is accessible
+                            _ = record.certificate_id.id
+                        except (AttributeError, TypeError):
+                            # Clear the broken reference
+                            logger.info(f"Clearing broken certificate_id for notification record {record.id}")
+                            record.write({'certificate_id': False})
+                # Try reading again
+                return super().read(fields, load)
+            raise
+
+    @api.model
+    def default_get(self, fields_list):
+        """Override default_get to auto-redirect when opened from activity"""
+        result = super().default_get(fields_list)
+        # Check if we're being opened from an activity context
+        if self.env.context.get('active_model') == 'mail.activity':
+            # This will trigger the redirect behavior in the view
+            result['auto_redirect'] = True
+        return result
+
+    def open_record(self):
+        """Override the default open action to redirect to certificates"""
+        return self.action_view_certificate()
 
 
 class NotificationCertificate(models.Model):
@@ -166,7 +240,8 @@ class NotificationCertificate(models.Model):
                     notification_record = self.env['certificate.notification.record'].create({
                         'employee_id': employee.id,
                         'certificate_id': record.id,
-                        'expiry_date': expiry_date,  # Set the expiry date manually
+                        'expiry_date': expiry_date,
+                        'certificate_name': certificate_name,  # Store as backup
                     })
 
                 # Ensure the notification record is valid before creating activity
@@ -191,14 +266,15 @@ class NotificationCertificate(models.Model):
                     activity = self.env['mail.activity'].create({
                         'summary': notification_summary,
                         'activity_type_id': activity_type.id,
-                        'note': f'Certification Expiry Notification\n\n'
+                        'note': f'🚨 Certification Expiry Notification\n\n'
                                 f'Employee: {employee.name}\n'
                                 f'Manager: {manager.name}\n'
                                 f'Certification: {certificate_name}\n'
                                 f'Expiry Date: {expiry_date.strftime("%B %d, %Y")}\n'
                                 f'Days Remaining: {days_until_expiry} days\n'
                                 f'Notification Sent: {today.strftime("%B %d, %Y")}\n\n'
-                                f'Click this activity to view all certificates for this employee.',
+                                f'📋 Click this activity to automatically view all certificates for this employee.\n'
+                                f'💡 The notification will auto-redirect to the certificate list.',
                         'res_model_id': self.env['ir.model']._get_id('certificate.notification.record'),
                         'res_id': notification_record.id,
                         'user_id': manager.user_id.id,
@@ -210,6 +286,25 @@ class NotificationCertificate(models.Model):
                     continue
 
         return True
+
+    @api.model
+    def cleanup_broken_notifications(self):
+        """Utility method to clean up notification records with broken certificate references"""
+        logger.info("Cleaning up broken certificate notification records...")
+        notifications = self.env['certificate.notification.record'].search([])
+        cleaned_count = 0
+
+        for notification in notifications:
+            try:
+                # Test if certificate_id is accessible
+                _ = notification.certificate_id.id if notification.certificate_id else None
+            except (AttributeError, TypeError) as e:
+                logger.info(f"Removing notification {notification.id} with broken certificate reference: {e}")
+                notification.unlink()
+                cleaned_count += 1
+
+        logger.info(f"Cleaned up {cleaned_count} broken notification records")
+        return cleaned_count
 
 
 class HrEmployee(models.Model):
