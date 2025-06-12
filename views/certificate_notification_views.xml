@@ -23,7 +23,7 @@
                         <group>
                             <field name="employee_id" readonly="1"/>
                             <field name="certificate_id" readonly="1"/>
-                            <field name="certificate_name" readonly="1" invisible="1"/>
+                            <field name="certificate_name" readonly="1"/>
                         </group>
                         <group>
                             <field name="expiry_date" readonly="1"/>
@@ -94,9 +94,9 @@
 # Clean up notification records with broken certificate references
 cleaned_count = model.cleanup_broken_notifications()
 if cleaned_count > 0:
-    env.user.notify_success(f'Cleaned up {cleaned_count} broken notification records')
+    raise UserError('Cleaned up %s broken notification records' % cleaned_count)
 else:
-    env.user.notify_info('No broken notification records found')
+    raise UserError('No broken notification records found')
         </field>
     </record>
 

@@ -15,7 +15,8 @@ class CertificateNotificationRecord(models.Model):
     display_name = fields.Char('Name', compute='_compute_display_name', store=True)
     name = fields.Char('Name', compute='_compute_display_name', store=True)
     employee_id = fields.Many2one('hr.employee', string='Employee', required=True)
-    certificate_id = fields.Many2one('hr.resume.line', string='Certificate', required=True, ondelete='cascade')
+    certificate_id = fields.Many2one('hr.resume.line', string='Certificate',
+                                     ondelete='set null')  # Changed to set null instead of cascade
     expiry_date = fields.Date('Expiry Date')
     days_remaining = fields.Integer('Days Remaining', compute='_compute_days_remaining', store=True)
 
@@ -32,21 +33,30 @@ class CertificateNotificationRecord(models.Model):
 
                     # Try to get certificate name from the linked record first
                     certificate_name = None
-                    if record.certificate_id and hasattr(record.certificate_id, 'id') and record.certificate_id.id:
+                    if record.certificate_id:
                         try:
-                            # Safely access the certificate record
-                            certificate_name = (
-                                    getattr(record.certificate_id, 'name', None) or
-                                    getattr(record.certificate_id, 'display_name', None) or
-                                    getattr(record.certificate_id, 'description', None)
-                            )
+                            # Test if the certificate record exists and is accessible
+                            if hasattr(record.certificate_id, 'exists') and record.certificate_id.exists():
+                                certificate_name = (
+                                        getattr(record.certificate_id, 'name', None) or
+                                        getattr(record.certificate_id, 'display_name', None) or
+                                        getattr(record.certificate_id, 'description', None)
+                                )
+                            else:
+                                # Certificate record doesn't exist, clear the reference
+                                logger.info(
+                                    f"Certificate record doesn't exist for notification {record.id}, clearing reference")
+                                record._clear_broken_certificate_reference()
+                                certificate_name = None
                         except Exception as e:
                             logger.warning(f"Error accessing certificate_id for record {record.id}: {e}")
+                            # Clear broken reference
+                            record._clear_broken_certificate_reference()
                             certificate_name = None
 
                     # Fallback to stored certificate name
                     if not certificate_name:
-                        certificate_name = record.certificate_name or f"Certificate {record.certificate_id.id if record.certificate_id else 'Unknown'}"
+                        certificate_name = record.certificate_name or f"Certificate (Deleted)"
 
                     computed_name = f"{employee_name} - {certificate_name}"
                     record.display_name = computed_name
@@ -58,6 +68,62 @@ class CertificateNotificationRecord(models.Model):
                 logger.warning(f"Error computing display_name for record {record.id}: {e}")
                 record.display_name = "Certificate Notification"
                 record.name = "Certificate Notification"
+
+    def _clear_broken_certificate_reference(self):
+        """Safely clear broken certificate reference"""
+        try:
+            self.env.cr.execute("""
+                UPDATE certificate_notification_record 
+                SET certificate_id = NULL 
+                WHERE id = %s
+            """, (self.id,))
+            self.env.cr.commit()
+        except Exception as e:
+            logger.error(f"Failed to clear broken reference for record {self.id}: {e}")
+            self.env.cr.rollback()
+
+    def web_read(self, specification):
+        """Override web_read to handle broken references in web interface"""
+        # Clean broken references before web read
+        self._cleanup_broken_references()
+        try:
+            return super().web_read(specification)
+        except (AttributeError, TypeError) as e:
+            if "'_unknown' object has no attribute" in str(e):
+                logger.warning(f"Broken reference in web_read: {e}")
+                # Clean again and retry
+                self._cleanup_broken_references()
+                self.env.invalidate_all()
+                try:
+                    return super().web_read(specification)
+                except Exception:
+                    # Return safe minimal data
+                    return []
+
+    @api.model
+    def search_read(self, domain=None, fields=None, offset=0, limit=None, order=None):
+        """Override search_read to handle broken references in searches"""
+        try:
+            # First do a normal search to get the IDs
+            ids = self.search(domain or [], offset=offset, limit=limit, order=order)
+            # Clean any broken references in the found records
+            if ids:
+                ids._cleanup_broken_references()
+            # Then read the cleaned records
+            return ids.read(fields)
+        except Exception as e:
+            logger.error(f"Error in search_read: {e}")
+            # Fallback to minimal search without problematic records
+            try:
+                # Search for records that definitely don't have broken references
+                safe_domain = (domain or []) + [
+                    '|',
+                    ('certificate_id', '=', False),
+                    ('certificate_id', 'in', self.env['hr.resume.line'].search([]).ids)
+                ]
+                return super().search_read(safe_domain, fields, offset, limit, order)
+            except Exception:
+                return []
 
     @api.depends('expiry_date')
     def _compute_days_remaining(self):
@@ -97,39 +163,72 @@ class CertificateNotificationRecord(models.Model):
         # Store certificate name as backup in case the certificate record gets deleted
         if record.certificate_id:
             try:
-                certificate_name = (
-                        getattr(record.certificate_id, 'name', None) or
-                        getattr(record.certificate_id, 'display_name', None) or
-                        getattr(record.certificate_id, 'description', None) or
-                        f"Certificate {record.certificate_id.id}"
-                )
-                record.certificate_name = certificate_name
-                record.certificate_description = getattr(record.certificate_id, 'description', '')
+                if record.certificate_id.exists():
+                    certificate_name = (
+                            getattr(record.certificate_id, 'name', None) or
+                            getattr(record.certificate_id, 'display_name', None) or
+                            getattr(record.certificate_id, 'description', None) or
+                            f"Certificate {record.certificate_id.id}"
+                    )
+                    record.certificate_name = certificate_name
+                    record.certificate_description = getattr(record.certificate_id, 'description', '')
             except Exception as e:
                 logger.warning(f"Error storing certificate backup info: {e}")
         return record
 
     def read(self, fields=None, load='_classic_read'):
-        """Override read to handle broken certificate references"""
+        """Override read to handle broken certificate references more robustly"""
+        # First, try to clean any broken references in this recordset
+        self._cleanup_broken_references()
+
         try:
             return super().read(fields, load)
-        except AttributeError as e:
-            if "'_unknown' object has no attribute 'id'" in str(e):
-                # Handle broken certificate references
-                logger.warning(f"Broken certificate reference detected, cleaning up: {e}")
-                # Try to fix by clearing the broken certificate_id
-                for record in self:
-                    if hasattr(record, 'certificate_id'):
-                        try:
-                            # Test if certificate_id is accessible
-                            _ = record.certificate_id.id
-                        except (AttributeError, TypeError):
-                            # Clear the broken reference
-                            logger.info(f"Clearing broken certificate_id for notification record {record.id}")
-                            record.write({'certificate_id': False})
-                # Try reading again
-                return super().read(fields, load)
+        except (AttributeError, TypeError) as e:
+            if "'_unknown' object has no attribute" in str(e):
+                logger.warning(f"Broken certificate reference detected in notification records: {e}")
+
+                # Force cleanup and try again
+                self._cleanup_broken_references()
+
+                try:
+                    # Clear cache and try reading again
+                    self.env.invalidate_all()
+                    return super().read(fields, load)
+                except Exception as retry_error:
+                    logger.error(f"Failed to read after cleanup: {retry_error}")
+                    # Return minimal safe data as fallback
+                    if fields:
+                        return [{field: False if field != 'id' else rec_id for field in fields}
+                                for rec_id in self.ids]
+                    else:
+                        return [{'id': rec_id, 'display_name': 'Broken Notification Record'}
+                                for rec_id in self.ids]
             raise
+
+    def _cleanup_broken_references(self):
+        """Helper method to clean broken references for this recordset"""
+        if not self.ids:
+            return
+
+        try:
+            # Use SQL to directly fix broken references without triggering ORM issues
+            self.env.cr.execute("""
+                UPDATE certificate_notification_record 
+                SET certificate_id = NULL 
+                WHERE id IN %s 
+                AND certificate_id IS NOT NULL 
+                AND certificate_id NOT IN (
+                    SELECT id FROM hr_resume_line WHERE id IS NOT NULL
+                )
+            """, (tuple(self.ids),))
+
+            if self.env.cr.rowcount > 0:
+                logger.info(f"Cleared {self.env.cr.rowcount} broken certificate references")
+                self.env.cr.commit()
+
+        except Exception as sql_error:
+            logger.error(f"Error during broken reference cleanup: {sql_error}")
+            self.env.cr.rollback()
 
     @api.model
     def default_get(self, fields_list):
@@ -196,6 +295,11 @@ class NotificationCertificate(models.Model):
             # Skip if record is not valid
             if not record or not hasattr(record, 'id') or not record.id:
                 logger.warning("Skipping invalid certificate record")
+                continue
+
+            # Verify the record still exists
+            if not record.exists():
+                logger.warning("Skipping non-existent certificate record")
                 continue
 
             # Get certificate name safely
@@ -291,20 +395,52 @@ class NotificationCertificate(models.Model):
     def cleanup_broken_notifications(self):
         """Utility method to clean up notification records with broken certificate references"""
         logger.info("Cleaning up broken certificate notification records...")
-        notifications = self.env['certificate.notification.record'].search([])
-        cleaned_count = 0
 
-        for notification in notifications:
-            try:
-                # Test if certificate_id is accessible
-                _ = notification.certificate_id.id if notification.certificate_id else None
-            except (AttributeError, TypeError) as e:
-                logger.info(f"Removing notification {notification.id} with broken certificate reference: {e}")
-                notification.unlink()
-                cleaned_count += 1
+        # Use SQL to find and clean broken references more efficiently
+        try:
+            # Find notification records with certificate_id that don't exist in hr_resume_line
+            self.env.cr.execute("""
+                SELECT id FROM certificate_notification_record 
+                WHERE certificate_id IS NOT NULL 
+                AND certificate_id NOT IN (
+                    SELECT id FROM hr_resume_line WHERE id IS NOT NULL
+                )
+            """)
+            broken_ids = [row[0] for row in self.env.cr.fetchall()]
 
-        logger.info(f"Cleaned up {cleaned_count} broken notification records")
-        return cleaned_count
+            if broken_ids:
+                # Update broken references to NULL
+                self.env.cr.execute("""
+                    UPDATE certificate_notification_record 
+                    SET certificate_id = NULL 
+                    WHERE id IN %s
+                """, (tuple(broken_ids),))
+
+                logger.info(f"Fixed {len(broken_ids)} broken certificate references")
+
+                # Also clean up any notification records without employees
+                self.env.cr.execute("""
+                    DELETE FROM certificate_notification_record 
+                    WHERE employee_id IS NULL 
+                    OR employee_id NOT IN (
+                        SELECT id FROM hr_employee WHERE id IS NOT NULL
+                    )
+                """)
+
+                deleted_count = self.env.cr.rowcount
+                if deleted_count > 0:
+                    logger.info(f"Deleted {deleted_count} notification records with missing employees")
+
+                self.env.cr.commit()
+                return len(broken_ids) + deleted_count
+            else:
+                logger.info("No broken notification records found")
+                return 0
+
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+            self.env.cr.rollback()
+            return 0
 
 
 class HrEmployee(models.Model):
