@@ -47,23 +47,4 @@
         </field>
     </record>
 
-    <record id="view_employee_search_inherit" model="ir.ui.view">
-        <field name="name">hr.employee.search.inherit</field>
-        <field name="model">hr.employee</field>
-        <field name="inherit_id" ref="hr.view_employee_filter"/>
-        <field name="arch" type="xml">
-            <field name="name" position="after">
-                <field name="employee_id"/>
-                <field name="employee_id_prefix"/>
-                <field name="employee_id_suffix"/>
-            </field>
-            <filter name="group_category_ids" position="after">
-                <filter name="group_prefix" string="ID Prefix" domain="[]"
-                        context="{'group_by': 'employee_id_prefix'}"/>
-                <filter name="group_suffix" string="ID Suffix" domain="[]"
-                        context="{'group_by': 'employee_id_suffix'}"/>
-            </filter>
-        </field>
-    </record>
-
 </odoo>

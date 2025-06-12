@@ -4,6 +4,3 @@ access_hr_onboarding_report_hr_manager,hr.onboarding.report hr_manager,model_hr_
 access_hr_custom_tab,hr.custom.tab,model_hr_custom_tab,hr.group_hr_manager,1,1,1,1
 access_hr_custom_field,hr.custom.field,model_hr_custom_field,hr.group_hr_manager,1,1,1,1
 access_notification_certificate_user,notification.certificate,model_notification_certificate,base.group_user,1,1,1,1
-access_certificate_notification_record_user,certificate.notification.record,model_certificate_notification_record,base.group_user,1,1,1,0
-access_certificate_notification_record_hr_user,certificate.notification.record hr_user,model_certificate_notification_record,hr.group_hr_user,1,1,1,1
-access_certificate_notification_record_hr_manager,certificate.notification.record hr_manager,model_certificate_notification_record,hr.group_hr_manager,1,1,1,1

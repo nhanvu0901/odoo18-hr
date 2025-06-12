@@ -29,7 +29,6 @@ Long description of module's purpose
         'views/hr_onboarding_report_menu.xml',
         'views/custom_tabs_and_fields.xml',
         'views/cron_jobs.xml',
-        'views/certificate_notification_views.xml',
     ],
     'assets': {
         'web.assets_backend': [
