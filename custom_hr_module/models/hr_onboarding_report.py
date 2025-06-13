@@ -5,7 +5,7 @@ import json
 
 class HROnboardingReport(models.TransientModel):
     _name = 'hr.onboarding.report'
-    _description = 'HR Onboarding/Offboarding Report'
+    _description = 'Employee Trend'
 
     date_from = fields.Date(
         string='Start Date',
@@ -31,16 +31,13 @@ class HROnboardingReport(models.TransientModel):
             domain.append(('department_id', 'in', department_ids))
         employees = self.env['hr.employee'].with_context(active_test=False).search(domain)
 
-        report_data = []
         onboarding_stats = {}
         offboarding_stats = {}
+        onboarding_employees = []
+        offboarding_employees = []
 
         for employee in employees:
-            if employee.create_date and employee.create_date.date():
-                hire_date = employee.create_date.date()
-                if date_from <= hire_date <= date_to:
-                    dept_name = employee.department_id.name or 'No Department'
-                    onboarding_stats[dept_name] = onboarding_stats.get(dept_name, 0) + 1
+            dept_name = employee.department_id.name or 'No Department'
 
             departure_date = None
             if hasattr(employee, 'departure_date') and employee.departure_date:
@@ -55,38 +52,34 @@ class HROnboardingReport(models.TransientModel):
                     departure_date = employee.write_date.date() if employee.write_date else None
 
             if departure_date and date_from <= departure_date <= date_to:
-                dept_name = employee.department_id.name or 'No Department'
                 offboarding_stats[dept_name] = offboarding_stats.get(dept_name, 0) + 1
+                offboarding_employees.append({
+                    'employee_name': employee.name,
+                    'department': dept_name,
+                    'job_title': employee.job_title or employee.job_id.name or '',
+                    'start_date': employee.create_date.date().strftime('%Y-%m-%d') if employee.create_date else '',
+                    'end_date': departure_date.strftime('%Y-%m-%d') if departure_date else '',
+                })
 
-            start_date = employee.create_date.date() if employee.create_date else None
-            end_date = departure_date
-            if end_date:
-                if end_date > date_to:
-                    report_data.append({
+            if employee.create_date and employee.create_date.date():
+                hire_date = employee.create_date.date()
+                if date_from <= hire_date <= date_to:
+                    onboarding_stats[dept_name] = onboarding_stats.get(dept_name, 0) + 1
+                    onboarding_employees.append({
                         'employee_name': employee.name,
-                        'department': employee.department_id.name or 'No Department',
+                        'department': dept_name,
                         'job_title': employee.job_title or employee.job_id.name or '',
-                        'start_date': start_date.strftime('%Y-%m-%d') if start_date else '',
-                        'end_date': end_date.strftime('%Y-%m-%d') if end_date else 'Active',
+                        'start_date': hire_date.strftime('%Y-%m-%d'),
+                        'end_date': 'Active',
                     })
-            else:
-                if (start_date and date_from <= start_date <= date_to):
-                    report_data.append({
-                        'employee_name': employee.name,
-                        'department': employee.department_id.name or 'No Department',
-                        'job_title': employee.job_title or employee.job_id.name or '',
-                        'start_date': start_date.strftime('%Y-%m-%d') if start_date else '',
-                        'end_date': end_date.strftime('%Y-%m-%d') if end_date else 'Active',
-                    })
-
         return {
-            'employee_data': report_data,
             'onboarding_stats': onboarding_stats,
             'offboarding_stats': offboarding_stats,
+            'onboarding_employees': onboarding_employees,
+            'offboarding_employees': offboarding_employees,
         }
 
     def action_generate_report(self):
-
         department_ids = self.department_ids.ids if self.department_ids else None
         report_data = self.get_report_data(self.date_from, self.date_to, department_ids)
 

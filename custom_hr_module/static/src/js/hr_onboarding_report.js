@@ -1,5 +1,5 @@
 import {registry} from "@web/core/registry";
-import {Component, onMounted, useRef, onWillUnmount} from "@odoo/owl";
+import {Component, onMounted, useRef, onWillUnmount, useState} from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 const Chart = window.Chart;
 
@@ -14,7 +14,18 @@ class HROnboardingReportAction extends Component {
         this.onboardingChartInstance = null;
         this.offboardingChartInstance = null;
 
+        this.state = useState({
+            currentReportType: 'onboarding',
+            reportData: {},
+            date_from: '',
+            date_to: '',
+            departments: [],
+            isDataLoaded: false,
+            isFromCache: false
+        });
+
         onMounted(() => {
+            this.initializeReportData();
             setTimeout(() => {
                 this.renderCharts();
             }, 100);
@@ -30,25 +41,93 @@ class HROnboardingReportAction extends Component {
         });
     }
 
+    initializeReportData() {
+        const contextData = this.props.action.context.report_data;
+
+        if (contextData && Object.keys(contextData).length > 0) {
+            this.updateStateFromContext();
+            this.saveReportDataToLocalStorage();
+        }
+        else {
+            console.log("📂 No context data, attempting to load from localStorage");
+            this.loadReportDataFromLocalStorage();
+        }
+    }
+
+    updateStateFromContext() {
+        this.state.reportData = this.props.action.context.report_data || {};
+        this.state.date_from = this.props.action.context.date_from || '';
+        this.state.date_to = this.props.action.context.date_to || '';
+        this.state.departments = this.props.action.context.departments || [];
+        this.state.isDataLoaded = true;
+        this.state.isFromCache = false;
+    }
+
+    saveReportDataToLocalStorage() {
+        try {
+            const reportData = {
+                report_data: this.state.reportData,
+                date_from: this.state.date_from,
+                date_to: this.state.date_to,
+                departments: this.state.departments,
+                timestamp: Date.now()
+            };
+
+            localStorage.setItem('hr_onboarding_report_data', JSON.stringify(reportData));
+        } catch (error) {
+            console.error("❌ Error saving to localStorage:", error);
+        }
+    }
+
+    loadReportDataFromLocalStorage() {
+        try {
+            const storedData = localStorage.getItem('hr_onboarding_report_data');
+
+            if (storedData) {
+                const parsedData = JSON.parse(storedData);
+                console.log("📂 Found stored data:", parsedData);
+
+                const dataAge = Date.now() - (parsedData.timestamp || 0);
+                const maxAge = 86400000; // 24 hours in milliseconds
+
+                if (dataAge < maxAge) {
+                    this.state.reportData = parsedData.report_data || {};
+                    this.state.date_from = parsedData.date_from || '';
+                    this.state.date_to = parsedData.date_to || '';
+                    this.state.departments = parsedData.departments || [];
+                    this.state.isDataLoaded = true;
+                    this.state.isFromCache = true;
+                } else {
+                    localStorage.removeItem('hr_onboarding_report_data');
+                    this.state.isDataLoaded = false;
+                }
+            } else {
+                this.state.isDataLoaded = false;
+            }
+        } catch (error) {
+            localStorage.removeItem('hr_onboarding_report_data');
+            this.state.isDataLoaded = false;
+        }
+    }
+
     get reportData() {
-        return this.props.action.context.report_data || {};
+        return this.state.reportData;
     }
 
     get departments() {
-        return this.props.action.context.departments || [];
+        return this.state.departments;
     }
 
-    // Add these missing getters for the dates
     get date_from() {
-        return this.props.action.context.date_from || '';
+        return this.state.date_from;
     }
 
     get date_to() {
-        return this.props.action.context.date_to || '';
+        return this.state.date_to;
     }
 
-    get employeeData() {
-        return this.reportData.employee_data || [];
+    get currentReportType() {
+        return this.state.currentReportType;
     }
 
     get onboardingStats() {
@@ -59,7 +138,47 @@ class HROnboardingReportAction extends Component {
         return this.reportData.offboarding_stats || {};
     }
 
+    get onboardingEmployees() {
+        return this.reportData.onboarding_employees || [];
+    }
+
+    get offboardingEmployees() {
+        return this.reportData.offboarding_employees || [];
+    }
+
+    get currentEmployeeData() {
+        return this.currentReportType === 'onboarding' ? this.onboardingEmployees : this.offboardingEmployees;
+    }
+
+    get hasData() {
+        const data = this.reportData;
+        if (!data || Object.keys(data).length === 0) {
+            return false;
+        }
+
+        const hasOnboardingData = data.onboarding_stats && Object.keys(data.onboarding_stats).length > 0;
+        const hasOffboardingData = data.offboarding_stats && Object.keys(data.offboarding_stats).length > 0;
+        const hasOnboardingEmployees = data.onboarding_employees && data.onboarding_employees.length > 0;
+        const hasOffboardingEmployees = data.offboarding_employees && data.offboarding_employees.length > 0;
+
+        return hasOnboardingData || hasOffboardingData || hasOnboardingEmployees || hasOffboardingEmployees;
+    }
+
+    get isFromCache() {
+        return this.state.isFromCache;
+    }
+
+    switchReportType(event) {
+        this.state.currentReportType = event.target.value;
+    }
+
     renderCharts() {
+        // Only render charts if we have data
+        if (!this.hasData) {
+            console.log("⚠️ No data available for charts");
+            return;
+        }
+
         if (this.onboardingChartRef.el) {
             this.renderPieChart(
                 this.onboardingChartRef.el,
@@ -75,7 +194,7 @@ class HROnboardingReportAction extends Component {
             this.renderPieChart(
                 this.offboardingChartRef.el,
                 this.offboardingStats,
-                'Offboarding',
+                'Departure',
                 'offboarding'
             );
         } else {
@@ -156,7 +275,7 @@ class HROnboardingReportAction extends Component {
                     plugins: {
                         title: {
                             display: true,
-                            text: `${title} Statistics`,
+                            text: `${title} Insight`,
                             font: {
                                 size: 16,
                                 weight: 'bold'
@@ -224,7 +343,7 @@ class HROnboardingReportAction extends Component {
     openWizardForm() {
         this.action.doAction({
             type: 'ir.actions.act_window',
-            name: 'HR Onboarding/Offboarding Report',
+            name: 'Employee Trend',
             res_model: 'hr.onboarding.report',
             view_mode: 'form',
             views: [[false, 'form']],

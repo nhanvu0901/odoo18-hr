@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_hr_custom_tab_list" model="ir.ui.view">
+        <field name="name">hr.custom.tab.list</field>
+        <field name="model">hr.custom.tab</field>
+        <field name="arch" type="xml">
+            <list string="Custom Tabs" delete="0">
+                <field name="tab_label" />
+            </list>
+        </field>
+    </record>
+
+    <record id="action_hr_custom_tab_remove_from_form" model="ir.actions.server">
+        <field name="name">Remove from the Employee form</field>
+        <field name="model_id" ref="model_hr_custom_tab" />
+        <field name="binding_model_id" ref="model_hr_custom_tab" />
+        <field name="state">code</field>
+        <field name="code">
+            if records:
+            action = records.action_remove_from_employee_form()
+        </field>
+    </record>
+
+    <record id="view_hr_custom_tab_form" model="ir.ui.view">
+        <field name="name">hr.custom.tab.form</field>
+        <field name="model">hr.custom.tab</field>
+        <field name="arch" type="xml">
+            <form string="Custom Tab">
+                <sheet>
+                    <header>
+                        <button name="create_tab" string="Save and Show Tab" type="object"
+                            class="oe_highlight" data-hotkey="s"
+                            invisible="id != False" />
+                        <button name="create_tab" string="Save and Apply Changes" type="object"
+                            class="oe_highlight" data-hotkey="s"
+                            invisible="id == False" />
+                    </header>
+
+                    <group>
+                        <group string="Tab Info">
+                            <field name="tab_label"
+                                placeholder="e.g. Personal Documents, Technical Skills" />
+                        </group>
+                    </group>
+
+                    <separator string="Field Definitions" />
+                    <p class="text-muted">Add as many fields as you want for this custom tab</p>
+
+                    <field name="field_ids">
+                        <list editable="bottom">
+                            <field name="field_description" placeholder="e.g. Custom Score" />
+                            <field name="field_type" />
+                            <field name="selection_field"
+                                placeholder="blue, yellow, red"
+                                help="Enter comma-separated values. Each value will be automatically formatted."
+                                invisible="field_type not in ['selection']"
+                            />
+                            <field name="widget"
+                                attrs="{'invisible': [('field_type', 'not in', ['binary', 'many2many', 'selection', 'float', 'many2one'])]}" />
+                            <field name="required" />
+                            <field name="readonly" />
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_hr_custom_tab" model="ir.actions.act_window">
+        <field name="name">Custom Tabs</field>
+        <field name="res_model">hr.custom.tab</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_manage_employee_tabs"
+        name="Manage Tabs"
+        action="action_hr_custom_tab"
+        parent="hr.menu_config_employee"
+        sequence="8" />
+</odoo>

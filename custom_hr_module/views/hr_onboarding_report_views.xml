@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Form view for report parameters -->
     <record id="hr_onboarding_report_form" model="ir.ui.view">
         <field name="name">hr.onboarding.report.form</field>
         <field name="model">hr.onboarding.report</field>
         <field name="arch" type="xml">
-            <form string="HR Onboarding/Offboarding Report">
+            <form string="HR Employee Trend">
                 <sheet>
                     <group>
                         <group>
@@ -28,7 +27,7 @@
 
     <!-- Action for the report wizard -->
     <record id="action_hr_onboarding_report" model="ir.actions.act_window">
-        <field name="name">HR Onboarding/Offboarding Report</field>
+        <field name="name">Employee Trend</field>
         <field name="res_model">hr.onboarding.report</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>

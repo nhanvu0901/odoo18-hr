@@ -30,11 +30,7 @@ class CertificateNotificationRecord(models.Model):
                     if record.certificate_id:
                         try:
                             if hasattr(record.certificate_id, 'exists') and record.certificate_id.exists():
-                                certificate_name = (
-                                        getattr(record.certificate_id, 'name', None) or
-                                        getattr(record.certificate_id, 'display_name', None) or
-                                        getattr(record.certificate_id, 'description', None)
-                                )
+                                certificate_name = getattr(record.certificate_id, 'display_name', None)
 
                         except Exception as e:
                             logger.warning(f"Error accessing certificate_id for record {record.id}: {e}")
@@ -187,30 +183,16 @@ class NotificationCertificate(models.Model):
     def process_certificate(self):
         logger.info("Starting certificate processing...")
         today = fields.Date.today()
-        thirty_days_from_now = today + timedelta(days=30)
+        ninety_days_from_now = today + timedelta(days=90)
 
         if 'hr.resume.line' not in self.env:
             logger.error("hr.resume.line model not found. Please enable Skills Management")
             return False
 
-        end_date_field = None
-        possible_end_date_fields = ['date_end', 'end_date', 'date_to', 'validity_end']
-
-        resume_model = self.env['hr.resume.line']
-        for field_name in possible_end_date_fields:
-            if field_name in resume_model._fields:
-                end_date_field = field_name
-                logger.info(f"Found end date field: {field_name}")
-                break
-
-        if not end_date_field:
-            logger.error("Could not find end date field in hr.resume.line model")
-            return False
-
         records = self.env['hr.resume.line'].search([
             ('display_type', '=', 'certification'),
-            (end_date_field, '>', today),
-            (end_date_field, '<=', thirty_days_from_now)
+            ('date_end', '>', today),
+            ('date_end', '<=', ninety_days_from_now)
         ])
 
         activity_type = self.env.ref('mail.mail_activity_data_warning', raise_if_not_found=False)
@@ -227,12 +209,7 @@ class NotificationCertificate(models.Model):
                 logger.warning("Skipping non-existent certificate record")
                 continue
 
-            certificate_name = (
-                    getattr(record, 'name', None) or
-                    getattr(record, 'display_name', None) or
-                    getattr(record, 'description', None) or
-                    f"Certificate {record.id}"
-            )
+            certificate_name =  getattr(record, 'name', None)
 
             employee = record.employee_id
             if not employee or not hasattr(employee, 'id') or not employee.id:
@@ -247,7 +224,7 @@ class NotificationCertificate(models.Model):
                 logger.warning(f"Skipping certificate {certificate_name} - manager {manager.name} has no user")
                 continue
 
-            expiry_date = getattr(record, end_date_field)
+            expiry_date = getattr(record, 'date_end')
             if not expiry_date:
                 logger.warning(f"Skipping certificate {certificate_name} - no expiry date")
                 continue
@@ -295,9 +272,7 @@ class NotificationCertificate(models.Model):
                                 f'Certification: {certificate_name}\n'
                                 f'Expiry Date: {expiry_date.strftime("%B %d, %Y")}\n'
                                 f'Days Remaining: {days_until_expiry} days\n'
-                                f'Notification Sent: {today.strftime("%B %d, %Y")}\n\n'
-                                f'Click this activity to automatically view all certificates for this employee.\n'
-                                f'The notification will auto-redirect to the certificate list.',
+                                f'Notification Sent: {today.strftime("%B %d, %Y")}\n\n',
                         'res_model_id': self.env['ir.model']._get_id('certificate.notification.record'),
                         'res_id': notification_record.id,
                         'user_id': manager.user_id.id,

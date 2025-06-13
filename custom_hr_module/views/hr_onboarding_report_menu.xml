@@ -4,7 +4,7 @@
 
     <!-- Our report menu -->
     <menuitem id="menu_hr_onboarding_report"
-              name="Onboarding/Offboarding Report"
+              name="Employee Trend"
               parent="hr.hr_menu_hr_reports"
               action="action_hr_onboarding_report"
               sequence="10"/>

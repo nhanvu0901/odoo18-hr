@@ -1,0 +1,238 @@
+.o_action_manager{
+    overflow: scroll !important;
+}
+.hr-onboarding-report {
+    padding: 24px;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+/* Header section */
+.report-header {
+
+    border-radius: 12px;
+    padding: 24px;
+    color: #000000;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.report-title {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.report-filters {
+    font-size: 14px;
+    color: #000000;
+    opacity: 1;
+    font-weight: 500;
+}
+
+.filter-item {
+    display: inline-flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+}
+
+/* Cards styling */
+.card {
+    border: none;
+    border-radius: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.chart-card {
+    height: 400px;
+}
+
+.card-header {
+    border-bottom: none;
+    padding: 16px 20px;
+    font-weight: 600;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+}
+
+.bg-gradient-warning {
+    background: linear-gradient(45deg, #ffc107, #e0a800);
+}
+
+.chart-container {
+    padding: 20px;
+    height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Table card styling */
+.table-card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.table-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Toggle buttons styling */
+.report-type-toggle .btn {
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.report-type-toggle .btn-check:checked + .btn-outline-primary {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+    border-color: #007bff;
+}
+
+.report-type-toggle .btn-check:checked + .btn-outline-warning {
+    background: linear-gradient(45deg, #ffc107, #e0a800);
+    border-color: #ffc107;
+    color: #000;
+}
+
+/* Table styling */
+.employee-table {
+    font-size: 14px;
+}
+
+.employee-table thead th {
+    background: linear-gradient(45deg, #495057, #343a40);
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 12px 16px;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+}
+
+.employee-table tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.employee-row {
+    transition: background-color 0.2s ease;
+}
+
+.badge {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+/* Empty state styling */
+.empty-state {
+    padding: 60px 20px;
+}
+
+.empty-icon {
+    opacity: 0.3;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .hr-onboarding-report {
+        padding: 16px;
+    }
+
+    .report-header {
+        padding: 20px;
+    }
+
+    .report-title {
+        font-size: 1.5rem;
+    }
+
+    .filter-item {
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .chart-card {
+        height: 300px;
+        margin-bottom: 20px;
+    }
+
+    .chart-container {
+        height: 220px;
+        padding: 15px;
+    }
+
+    .report-type-toggle {
+        width: 100%;
+        margin-top: 12px;
+    }
+
+    .report-type-toggle .btn {
+        flex: 1;
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+}
+
+/* Scrollbar styling */
+.table-responsive::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+/* Animation for data loading */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Print styles */
+@media print {
+    .hr-onboarding-report {
+        background-color: white;
+        padding: 0;
+    }
+
+    .card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+        page-break-inside: avoid;
+    }
+
+    .report-type-toggle {
+        display: none;
+    }
+}
