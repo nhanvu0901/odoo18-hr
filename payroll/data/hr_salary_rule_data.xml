@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="hr_salary_rule_pit" model="hr.salary.rule">
+            <field name="name">Personal Income Tax</field>
+            <field name="code">PIT</field>
+            <field name="category_id" ref="payroll.DED"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Lấy thông tin thực tế từ employee và contract
+num_dependents = employee.children or 0
+personal_deduction = 11000000
+dependent_deduction = 4400000 * num_dependents
+basic_salary = contract.wage or 0.0
+
+# Tính thu nhập chịu thuế
+taxable_income = basic_salary - personal_deduction - dependent_deduction
+
+if taxable_income &lt;= 0.0:
+    result = 0.0
+else:
+    pit_amount = 0.0
+    remaining_income = taxable_income
+
+    # Bậc 1: 0 - 5 triệu (5%)
+    if remaining_income > 0:
+        bracket_1 = min(remaining_income, 5000000)
+        pit_amount = pit_amount + bracket_1 * 0.05
+        remaining_income = remaining_income - bracket_1
+
+    # Bậc 2: 5 - 10 triệu (10%)
+    if remaining_income > 0:
+        bracket_2 = min(remaining_income, 5000000)
+        pit_amount = pit_amount + bracket_2 * 0.10
+        remaining_income = remaining_income - bracket_2
+
+    # Bậc 3: 10 - 18 triệu (15%)
+    if remaining_income > 0:
+        bracket_3 = min(remaining_income, 8000000)
+        pit_amount = pit_amount + bracket_3 * 0.15
+        remaining_income = remaining_income - bracket_3
+
+    # Bậc 4: 18 - 32 triệu (20%)
+    if remaining_income > 0:
+        bracket_4 = min(remaining_income, 14000000)
+        pit_amount = pit_amount + bracket_4 * 0.20
+        remaining_income = remaining_income - bracket_4
+
+    # Bậc 5: 32 - 52 triệu (25%)
+    if remaining_income > 0:
+        bracket_5 = min(remaining_income, 20000000)
+        pit_amount = pit_amount + bracket_5 * 0.25
+        remaining_income = remaining_income - bracket_5
+
+    # Bậc 6: 52 - 80 triệu (30%)
+    if remaining_income > 0:
+        bracket_6 = min(remaining_income, 28000000)
+        pit_amount = pit_amount + bracket_6 * 0.30
+        remaining_income = remaining_income - bracket_6
+
+    # Bậc 7: > 80 triệu (35%)
+    if remaining_income > 0:
+        pit_amount = pit_amount + remaining_income * 0.35
+
+    result = -pit_amount
+            </field>
+            <field name="sequence">190</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>

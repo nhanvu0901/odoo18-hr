@@ -157,6 +157,280 @@ class HrPayslip(models.Model):
         "Prevent Compute on Confirm", compute="_compute_prevent_compute_on_confirm"
     )
 
+    def auto_create_payslips(self):
+        employees = self.env['hr.employee'].get_all_employees()
+        payslips = self.env['hr.payslip']
+        
+        for employee in employees:
+            payslip = self._create_payslip_for_employee(employee)
+            if payslip:
+                payslips += payslip
+        
+        return self._generate_notification_response(payslips)
+
+    def _create_payslip_for_employee(self, employee):
+        contract = self._get_employee_contract(employee)
+        if not contract:
+            return None
+        
+        if not self._validate_contract(contract):
+            return None
+        
+        date_from, date_to = self._calculate_payslip_dates(contract)
+        if not date_from or not date_to:
+            return None
+            
+        # if contract start date is after the calculated date_from
+        if hasattr(contract, 'date_start') and contract.date_start and contract.date_start > date_from:
+            date_from = contract.date_start
+            
+            if date_from > date_to:
+                return None
+
+        if self._payslip_already_exists(employee, date_from, date_to):
+            return None
+        
+        return self._create_payslip(employee, contract, date_from, date_to)
+    
+    def _get_employee_contract(self, employee):
+        today = fields.Date.today()
+        all_contracts = employee._get_contracts(
+            date_from=today + relativedelta(months=-12), 
+            date_to=today
+        )
+        return all_contracts[0] if all_contracts else None
+
+    def _validate_contract(self, contract):
+        return bool(contract.struct_id and contract.journal_id)
+
+    def _calculate_payslip_dates(self, contract):
+        schedule_pay = getattr(contract, 'schedule_pay', 'monthly')
+        today = fields.Date.today()
+        
+        date_calculators = {
+            'weekly': self._calculate_weekly_dates,
+            'bi-weekly': self._calculate_biweekly_dates,
+            'monthly': self._calculate_monthly_dates,
+            'bi-monthly': self._calculate_bimonthly_dates,
+            'quarterly': self._calculate_quarterly_dates,
+            'semi-annually': self._calculate_semiannual_dates,
+            'annually': self._calculate_annual_dates,
+        }
+        
+        calculator = date_calculators.get(schedule_pay, self._calculate_monthly_dates)
+        return calculator(today)
+    
+    def _get_date_context(self, today):
+        day_of_month = today.day
+        month = today.month
+        year = today.year
+        weekday = today.weekday()
+        
+        last_day_of_month = (today + relativedelta(months=+1, day=1, days=-1)).day
+        last_day_of_year = date(year, 12, 31)
+        is_last_day_of_month = day_of_month == last_day_of_month
+        is_last_day_of_year = today == last_day_of_year
+        
+        current_quarter = (month - 1) // 3 + 1
+        is_last_day_of_quarter = is_last_day_of_month and month in [3, 6, 9, 12]
+        
+        return {
+            'day_of_month': day_of_month,
+            'month': month,
+            'year': year,
+            'weekday': weekday,
+            'last_day_of_month': last_day_of_month,
+            'last_day_of_year': last_day_of_year,
+            'is_last_day_of_month': is_last_day_of_month,
+            'is_last_day_of_year': is_last_day_of_year,
+            'current_quarter': current_quarter,
+            'is_last_day_of_quarter': is_last_day_of_quarter,
+        }
+        
+    def _calculate_weekly_dates(self, today):
+        context = self._get_date_context(today)
+        weekday = context['weekday']
+    
+        if weekday == 6:  # Sunday
+            date_from = today + relativedelta(days=-6)  # Monday of current week
+            date_to = today  # Sunday (today)
+        else:  # Monday to Saturday
+            days_since_sunday = weekday + 1
+            date_from = today + relativedelta(days=-(days_since_sunday + 6))  # Monday of previous week
+            date_to = today + relativedelta(days=-(days_since_sunday))  # Sunday of previous week
+        
+        return date_from, date_to
+
+    def _calculate_biweekly_dates(self, today):
+        context = self._get_date_context(today)
+        weekday = context['weekday']
+        
+        if weekday == 6:  # Sunday
+            date_from = today + relativedelta(days=-13)  # Monday of previous week
+            date_to = today  # Sunday (today)
+        else:  # Monday to Saturday
+            days_since_sunday = weekday + 1
+            date_from = today + relativedelta(days=-(days_since_sunday + 13))  # Monday of 2 weeks ago
+            date_to = today + relativedelta(days=-(days_since_sunday))  # Sunday of previous week
+        
+        return date_from, date_to
+    
+    def _calculate_monthly_dates(self, today):
+        context = self._get_date_context(today)
+        day_of_month = context['day_of_month']
+        month = context['month']
+        last_day_of_month = context['last_day_of_month']
+        
+        if day_of_month >= last_day_of_month or (month == 2 and day_of_month >= 28):
+            date_from = today.replace(day=1)
+            date_to = today + relativedelta(months=+1, day=1, days=-1)
+        else:
+            date_from = today + relativedelta(months=-1, day=1)
+            date_to = today.replace(day=1) + relativedelta(days=-1)
+        
+        return date_from, date_to
+
+    def _calculate_bimonthly_dates(self, today):
+        context = self._get_date_context(today)
+        is_last_day_of_month = context['is_last_day_of_month']
+        
+        if is_last_day_of_month:
+            date_from = today + relativedelta(months=-1, day=1)
+            date_to = today
+        else:
+            date_from = today + relativedelta(months=-2, day=1)
+            date_to = today + relativedelta(day=1, days=-1)  # last day of previous month
+        
+        return date_from, date_to
+    
+    def _calculate_quarterly_dates(self, today):
+        context = self._get_date_context(today)
+        year = context['year']
+        current_quarter = context['current_quarter']
+        is_last_day_of_quarter = context['is_last_day_of_quarter']
+        
+        if is_last_day_of_quarter:
+            first_month_of_quarter = 3 * current_quarter - 2
+            date_from = date(year, first_month_of_quarter, 1)
+            date_to = today
+        else:
+            previous_quarter = current_quarter - 1 if current_quarter > 1 else 4
+            year_of_previous_quarter = year if previous_quarter < current_quarter else year - 1
+            first_month_of_quarter = 3 * previous_quarter - 2
+            last_month_of_quarter = 3 * previous_quarter
+            
+            date_from = date(year_of_previous_quarter, first_month_of_quarter, 1)
+            date_to = date(year_of_previous_quarter, last_month_of_quarter, 1) + relativedelta(day=31)
+            
+            # months less than 31 days
+            if date_to.month != last_month_of_quarter:
+                date_to = date_to + relativedelta(days=-date_to.day)
+        
+        return date_from, date_to
+    
+    def _calculate_semiannual_dates(self, today):
+        context = self._get_date_context(today)
+        year = context['year']
+        month = context['month']
+        last_day_of_year = context['last_day_of_year']
+        is_last_day_of_year = context['is_last_day_of_year']
+        
+        is_first_half = month <= 6
+        
+        if is_last_day_of_year:
+            date_from = date(year, 7, 1)
+            date_to = last_day_of_year
+        elif is_first_half:
+            # today is in the first half of the year, create payslips for the second half of last year
+            prev_year = year - 1
+            date_from = date(prev_year, 7, 1)
+            date_to = date(prev_year, 12, 31)
+        else:
+            # today is in the second half of the year (not the last day of this year)
+            date_from = date(year, 1, 1)
+            date_to = date(year, 6, 30)
+        
+        return date_from, date_to
+    
+    def _calculate_annual_dates(self, today):
+        context = self._get_date_context(today)
+        year = context['year']
+        last_day_of_year = context['last_day_of_year']
+        is_last_day_of_year = context['is_last_day_of_year']
+        
+        if is_last_day_of_year:
+            date_from = date(year, 1, 1)
+            date_to = last_day_of_year
+        else:
+            date_from = date(year - 1, 1, 1)
+            date_to = date(year - 1, 12, 31)
+        
+        return date_from, date_to
+
+    def _payslip_already_exists(self, employee, date_from, date_to):
+        existing_payslips = self.env['hr.payslip'].search([
+            ('employee_id', '=', employee.id),
+            ('date_from', '=', date_from),
+            ('date_to', '=', date_to),
+            ('state', 'not in', ['cancel', 'done']),
+        ])
+        return bool(existing_payslips)
+    
+    def _create_payslip(self, employee, contract, date_from, date_to):
+        slip_data = self.env["hr.payslip"].get_payslip_vals(
+            date_from, date_to, employee.id, 
+            contract_id=False, struct_id=[contract.struct_id.id]
+        )
+
+        payslip_values = {
+            "employee_id": employee.id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "contract_id": contract.id,
+            "struct_id": contract.struct_id.id,
+            "name": employee.name,
+            "input_line_ids": [
+                (0, 0, x) for x in slip_data["value"].get("input_line_ids")
+            ],
+            "worked_days_line_ids": [
+                (0, 0, x) for x in slip_data["value"].get("worked_days_line_ids")
+            ],
+            "company_id": employee.company_id.id,
+        }
+        
+        new_payslip = self.env['hr.payslip'].create(payslip_values)
+        new_payslip.write({'state': 'draft'})
+        
+        return new_payslip
+    
+    def _generate_notification_response(self, payslips):
+        payslip_count = len(payslips)
+        
+        if payslip_count > 0:
+            message = f'Successfully generated {payslip_count} {"payslips" if payslip_count > 1 else "payslip"}'
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Success',
+                    'message': message,
+                    'sticky': False,
+                    'type': 'success',
+                    'next': self.env.ref('payroll.hr_payslip_action').read()[0]
+                }
+            }
+        else:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Warning',
+                    'message': 'No payslips generated',
+                    'sticky': False,
+                    'type': 'warning',
+                }
+            }
+
     def _compute_allow_cancel_payslips(self):
         self.allow_cancel_payslips = (
             self.env["ir.config_parameter"]
@@ -721,6 +995,22 @@ class HrPayslip(models.Model):
                 worked_days_lines += worked_days_lines.new(line)
             payslip.worked_days_line_ids = worked_days_lines
 
+    @api.onchange("employee_id")
+    def onchange_employee_clear_data(self):
+        for payslip in self:
+            if payslip.employee_id and payslip.state == 'draft':
+                payslip.contract_id = False
+                payslip.struct_id = False
+                payslip.name = False
+                payslip.number = False
+                payslip.worked_days_line_ids = [(5, 0, 0)]
+                payslip.input_line_ids = [(5, 0, 0)]
+                payslip.line_ids = [(5, 0, 0)]
+                payslip.date_from = fields.Date.to_string(date.today().replace(day=1))
+                payslip.date_to = fields.Date.to_string(
+                    (datetime.now() + relativedelta(months=+1, day=1, days=-1)).date()
+                )
+
     @api.onchange("employee_id", "date_from", "date_to")
     def onchange_employee(self):
         for payslip in self:
@@ -736,7 +1026,7 @@ class HrPayslip(models.Model):
                 contract_ids = payslip._get_employee_contracts().ids
                 if not contract_ids:
                     continue
-                payslip.contract_id = payslip.env["hr.contract"].browse(contract_ids[0])
+                # payslip.contract_id = payslip.env["hr.contract"].browse(contract_ids[0])
             # Assign struct_id automatically when the user don't selected one.
             if not payslip.struct_id and not payslip.env.context.get("struct_id"):
                 if not payslip.contract_id.struct_id:

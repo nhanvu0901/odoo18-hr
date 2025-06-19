@@ -4,7 +4,6 @@
     "name": "Payroll",
     "version": "18.0.1.1.3",
     "category": "Payroll",
-    "website": "https://github.com/OCA/payroll",
     "sequence": 38,
     "summary": "Manage your employee payroll records",
     "license": "LGPL-3",
@@ -19,6 +18,7 @@
         "security/ir.model.access.csv",
         "data/hr_payroll_sequence.xml",
         "data/hr_payroll_data.xml",
+        # "data/hr_salary_rule_data.xml",
         "wizard/hr_payroll_contribution_register_report_views.xml",
         "wizard/hr_payroll_payslips_by_employees_views.xml",
         "views/menus.xml",
@@ -38,8 +38,14 @@
         "views/res_config_settings_views.xml",
         "wizard/hr_payroll_send_email.xml",
         "wizard/hr_payslip_change_state_view.xml",
+        "views/hr_custom_export_report.xml"
     ],
+    'assets': {
+        'web.assets_backend': [
+            'payroll/static/src/js/hr_export_report.js',
+            'payroll/static/src/xml/hr_export_report.xml',
+        ],
+    },
     "demo": ["demo/hr_payroll_demo.xml"],
     "application": True,
-    "maintainers": ["appstogrow", "nimarosa"],
 }

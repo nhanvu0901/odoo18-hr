@@ -7,6 +7,9 @@ from odoo.exceptions import ValidationError
 import re
 
 
+
+
+
 class HrEmployee(models.Model):
     _inherit = 'hr.employee'
 

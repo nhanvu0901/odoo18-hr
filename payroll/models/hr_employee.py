@@ -1,6 +1,6 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class HrEmployee(models.Model):
@@ -18,3 +18,7 @@ class HrEmployee(models.Model):
     def _compute_payslip_count(self):
         for employee in self:
             employee.payslip_count = len(employee.slip_ids)
+            
+    @api.model
+    def get_all_employees(self):
+        return self.search([('active', '=', True)])

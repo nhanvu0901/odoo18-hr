@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Custom Tree View for Payslips -->
+        <record id="hr_payslip_view_tree_custom" model="ir.ui.view">
+            <field name="name">hr.payslip.tree.custom</field>
+            <field name="model">hr.payslip</field>
+            <field name="inherit_id" ref="payroll.hr_payslip_view_tree"/>
+            <field name="arch" type="xml">
+                <xpath expr="//list" position="attributes">
+                    <attribute name="js_class">hr_export_report</attribute>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- KK-TNCN Export Wizard View -->
+        <record id="view_hr_kk_tncn_export_wizard" model="ir.ui.view">
+            <field name="name">hr.kk.tncn.export.wizard</field>
+            <field name="model">hr.kk.tncn.export</field>
+            <field name="arch" type="xml">
+                <form string="Export KK-TNCN">
+                    <group>
+                        <group string="From Period">
+                            <field name="month_from"/>
+                            <field name="year_from"/>
+                        </group>
+                        <group string="To Period">
+                            <field name="month_to"/>
+                            <field name="year_to"/>
+                        </group>
+                    </group>
+                    <footer>
+                        <button
+                            string="Export"
+                            name="export_kk_tncn"
+                            type="object"
+                            class="oe_highlight"
+                        />
+                        <button string="Cancel" class="btn-secondary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <!-- KK-TNCN Export Wizard View (Simple) -->
+        <record id="view_hr_kk_tncn_export_wizard_simple" model="ir.ui.view">
+            <field name="name">hr.kk.tncn.export.wizard.simple</field>
+            <field name="model">hr.kk.tncn.export</field>
+            <field name="arch" type="xml">
+                <form string="Export KK-TNCN">
+                    <group>
+                        <group string="From Period">
+                            <field name="month_from"/>
+                            <field name="year_from"/>
+                        </group>
+                        <group string="To Period">
+                            <field name="month_to"/>
+                            <field name="year_to"/>
+                        </group>
+                    </group>
+                    <footer>
+                        <button
+                            string="Export"
+                            name="export_kk_tncn"
+                            type="object"
+                            class="oe_highlight"
+                        />
+                        <button string="Cancel" class="btn-secondary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <!-- QTT-TNCN Export Wizard View -->
+        <record id="view_hr_qtt_tncn_export_wizard" model="ir.ui.view">
+            <field name="name">hr.qtt.tncn.export.wizard</field>
+            <field name="model">hr.qtt.tncn.export</field>
+            <field name="arch" type="xml">
+                <form string="Export QTT-TNCN">
+                    <group>
+                        <field name="year"/>
+                    </group>
+                    <footer>
+                        <button
+                            string="Export"
+                            name="export_qtt_tncn"
+                            type="object"
+                            class="oe_highlight"
+                        />
+                        <button string="Cancel" class="btn-secondary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <!-- QTT-TNCN Export Wizard View (Simple) -->
+        <record id="view_hr_qtt_tncn_export_wizard_simple" model="ir.ui.view">
+            <field name="name">hr.qtt.tncn.export.wizard.simple</field>
+            <field name="model">hr.qtt.tncn.export</field>
+            <field name="arch" type="xml">
+                <form string="Export QTT-TNCN">
+                    <group>
+                        <field name="year"/>
+                    </group>
+                    <footer>
+                        <button
+                            string="Export"
+                            name="export_qtt_tncn"
+                            type="object"
+                            class="oe_highlight"
+                        />
+                        <button string="Cancel" class="btn-secondary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <!-- KK-TNCN Export Action -->
+        <record id="action_hr_kk_tncn_export_wizard" model="ir.actions.act_window">
+            <field name="name">Export KK-TNCN</field>
+            <field name="res_model">hr.kk.tncn.export</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_hr_kk_tncn_export_wizard"/>
+            <field name="target">new</field>
+        </record>
+
+        <!-- QTT-TNCN Export Action -->
+        <record id="action_hr_qtt_tncn_export_wizard" model="ir.actions.act_window">
+            <field name="name">Export QTT-TNCN</field>
+            <field name="res_model">hr.qtt.tncn.export</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_hr_qtt_tncn_export_wizard"/>
+            <field name="target">new</field>
+        </record>
+
+
+
+    </data>
+</odoo>
